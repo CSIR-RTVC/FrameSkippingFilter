@@ -33,10 +33,9 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 #include "stdafx.h"
 #include "FrameSkippingFilter.h"
+#include <cassert>
 #include <set>
 #include <dvdmedia.h>
-#include <ImageUtils/MediaUtil.h>
-#include "StringUtil.h"
 
 // timestamp unit is in 10^-7
 const double TIMESTAMP_FACTOR = 10000000.0;
@@ -216,7 +215,7 @@ HRESULT FrameSkippingFilter::Run(REFERENCE_TIME tStart)
     m_vFramesToBeSkipped.clear();
 
     int iSkip = 0, iTotal = 0;
-    bool res = artist::lowestRatio(m_dSourceFrameRate, m_dTargetFrameRate, iSkip, iTotal);
+    bool res = lowestRatio(m_dSourceFrameRate, m_dTargetFrameRate, iSkip, iTotal);
     if (res)
     {
       m_uiSkipFrameNumber = iSkip;
@@ -391,3 +390,62 @@ inline void FrameSkippingOutputPin::adjustAverageTimePerFrameInVideoInfoHeader(A
   }
 }
 
+bool FrameSkippingFilter::lowestRatio(double SourceFrameRate, double targetFrameRate, int& iSkipFrame, int& tTotalFrames)
+{
+
+  if (targetFrameRate > SourceFrameRate)
+  {
+    return false;
+  }
+  const double EPSILON = 0.0001;
+  if (SourceFrameRate - targetFrameRate < EPSILON)
+  {
+    iSkipFrame = 0;
+    tTotalFrames = 0;
+    return true;
+  }
+
+  //get rid of the floating point
+  //limited to 1 decimal for now
+  if (fmod(targetFrameRate, 1) != 0 || fmod(SourceFrameRate, 1) != 0)
+  {
+    targetFrameRate = targetFrameRate * 10;
+    SourceFrameRate = SourceFrameRate * 10;
+  }
+
+  double targetFrameRateTemp(round(targetFrameRate)), SourceFrameRateTemp(round(SourceFrameRate));
+  //Logic to find the greatest common factor
+  while (true)
+  {
+    (targetFrameRateTemp > SourceFrameRateTemp) ? targetFrameRateTemp = remainder(targetFrameRateTemp, SourceFrameRateTemp) :
+      SourceFrameRateTemp = remainder(SourceFrameRateTemp, targetFrameRateTemp);
+    if (targetFrameRateTemp < 0)
+    {
+      targetFrameRateTemp += SourceFrameRateTemp;
+    }
+    else if (SourceFrameRateTemp < 0)
+    {
+      SourceFrameRateTemp += targetFrameRateTemp;
+    }
+    if (targetFrameRateTemp <= 0 || SourceFrameRateTemp <= 0)
+    {
+      break;
+    }
+  }
+  // Divide by the GCF to get the lowest ratio
+  if (targetFrameRateTemp == 0)
+  {
+    iSkipFrame = (unsigned int)((SourceFrameRate - targetFrameRate) / SourceFrameRateTemp);
+    tTotalFrames = (unsigned int)(SourceFrameRate / SourceFrameRateTemp);
+  }
+  else if (SourceFrameRateTemp == 0)
+  {
+    iSkipFrame = (unsigned int)((SourceFrameRate - targetFrameRate) / targetFrameRateTemp);
+    tTotalFrames = (unsigned int)(SourceFrameRate / targetFrameRateTemp);
+  }
+  else
+  {
+    //The previous loop prevent this from happening
+  }
+  return true;
+}

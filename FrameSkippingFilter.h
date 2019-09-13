@@ -123,6 +123,8 @@ public:
 
 private:
 
+  bool lowestRatio(double SourceFrameRate, double targetFrameRate, int& iSkipFrame, int& tTotalFrames);
+
   /// the total number of frames to be skipped
   unsigned m_uiSkipFrameNumber;
   /// the total number of frames per second
